@@ -11,6 +11,7 @@ struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
+    clear_color: wgpu::Color,
     window: Window,
 }
 
@@ -61,6 +62,8 @@ impl State {
         };
         surface.configure(&device, &config);
 
+        let clear_color = wgpu::Color::BLACK;
+
         Self {
             window,
             surface,
@@ -68,6 +71,7 @@ impl State {
             queue,
             config,
             size,
+            clear_color,
         }
     }
 
@@ -85,7 +89,18 @@ impl State {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.clear_color = wgpu::Color {
+                    r: position.x as f64 / self.size.width as f64,
+                    g: position.y as f64 / self.size.height as f64,
+                    b: 1.0,
+                    a: 1.0,
+                };
+                true
+            }
+            _ => false,
+        }
     }
 
     fn update(&mut self) {}
@@ -107,12 +122,7 @@ impl State {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(self.clear_color),
                         store: true,
                     },
                 })],
@@ -157,8 +167,9 @@ pub async fn run() {
                         state.resize(*physical_size);
                     }
                     WindowEvent::ScaleFactorChanged {
-                        scale_factor,
                         new_inner_size,
+                        // scale_factor,
+                        ..
                     } => {
                         state.resize(**new_inner_size);
                     }
@@ -166,17 +177,16 @@ pub async fn run() {
                     _ => {}
                 }
             }
-        },
+        }
         Event::RedrawRequested(window_id) if window_id == state.window.id() => {
             state.update();
             match state.render() {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                 Err(e) => eprintln!("{:?}", e),
             }
-
-        },
+        }
         Event::MainEventsCleared => {
             state.window().request_redraw();
         }
