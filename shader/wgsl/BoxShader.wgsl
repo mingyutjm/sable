@@ -17,12 +17,12 @@ struct VertexOutput {
 @vertex
 fn VS(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = cbuffer.world_view_proj * vec4f(model.position, 1.0);
+    out.clip_position = cbuffer.world_view_proj * vec4<f32>(model.position, 1.0);
     out.color = model.color;
     return out;
 }
 
 @fragment
 fn PS(in: VertexOutput) -> @location(0) vec4f {
-    return vec4f(in.color, 1.0);
+    return vec4<f32>(in.color, 1.0);
 }

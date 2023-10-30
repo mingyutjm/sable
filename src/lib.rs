@@ -1,12 +1,14 @@
-mod vertex;
-mod geometry_builder;
 mod camera;
 mod constant_buffer;
+mod geometry_builder;
+mod vertex;
+
+use std::default;
 
 use camera::Camera;
-use vertex::Vertex;
 use constant_buffer::ConstantBuffer;
-use wgpu::{include_spirv_raw, util::DeviceExt, include_wgsl};
+use vertex::Vertex;
+use wgpu::{include_spirv_raw, include_wgsl, util::DeviceExt};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -14,53 +16,33 @@ use winit::{
     window::WindowBuilder,
 };
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    color: [f32; 3],
-}
 // unsafe impl bytemuck::Pod for Vertex {}
 // unsafe impl bytemuck::Zeroable for Vertex {}
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [1.0, 0.0, 0.0] }, // A
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.5, 0.0] }, // B
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 1.0, 0.0] }, // C
-    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.0, 0.5, 0.5] }, // D
-    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.0, 0.0, 1.0] }, // E
+    Vertex {
+        position: [-0.0868241, 0.49240386, 0.0],
+        color: [1.0, 0.0, 0.0, 1.0],
+    }, // A
+    Vertex {
+        position: [-0.49513406, 0.06958647, 0.0],
+        color: [0.5, 0.5, 0.0, 1.0],
+    }, // B
+    Vertex {
+        position: [-0.21918549, -0.44939706, 0.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    }, // C
+    Vertex {
+        position: [0.35966998, -0.3473291, 0.0],
+        color: [0.0, 0.5, 0.5, 1.0],
+    }, // D
+    Vertex {
+        position: [0.44147372, 0.2347359, 0.0],
+        color: [0.0, 0.0, 1.0, 1.0],
+    }, // E
 ];
 
-const INDICES: &[u16] = &[
-    0, 1, 4,
-    1, 2, 4,
-    2, 3, 4,
-];
-
-impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            // attributes: &Self::ATTRIBS,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
-        }
-    }
-}
+const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
 struct State {
     surface: wgpu::Surface,
@@ -76,6 +58,7 @@ struct State {
     num_indices: u32,
     camera: Camera,
     constant_buffer_bind_group: wgpu::BindGroup,
+    clear_color: wgpu::Color,
 }
 
 impl State {
@@ -126,15 +109,15 @@ impl State {
         surface.configure(&device, &config);
 
         // Shader
-        let vertex_shader = unsafe { device.create_shader_module_spirv(
-            &include_spirv_raw!("../shader/spirv/BoxShader_VS.spv")
-        ) };
-        let fragment_shader = unsafe { device.create_shader_module_spirv(
-            &include_spirv_raw!("../shader/spirv/BoxShader_PS.spv")
-        ) };
-        let shader = device.create_shader_module(
-            include_wgsl!("../shader/wgsl/BoxShader.wgsl")
-        );
+        let vertex_shader = unsafe {
+            device
+                .create_shader_module_spirv(&include_spirv_raw!("../shader/spirv/BoxShader_VS.spv"))
+        };
+        let fragment_shader = unsafe {
+            device
+                .create_shader_module_spirv(&include_spirv_raw!("../shader/spirv/BoxShader_PS.spv"))
+        };
+        let shader = device.create_shader_module(include_wgsl!("../shader/wgsl/BoxShader.wgsl"));
 
         // Camera
         let camera = Camera {
@@ -150,113 +133,99 @@ impl State {
         let mut constant = ConstantBuffer::new();
         constant.update_view_proj(&camera);
 
-        let constant_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Constant Buffer"),
-                contents: bytemuck::cast_slice(&[constant]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
-        );
+        let constant_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Constant Buffer"),
+            contents: bytemuck::cast_slice(&[constant]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
-        let constant_buffer_bind_group_layout = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        let constant_buffer_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Constant Buffer Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }
-                ],
-            }
-        );
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
 
-        let constant_buffer_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                label: Some("Constant Buffer Bind Group"),
-                layout: &constant_buffer_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: constant_buffer.as_entire_binding(),
-                    }
-                ],
-            }
-        );
+        let constant_buffer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Constant Buffer Bind Group"),
+            layout: &constant_buffer_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: constant_buffer.as_entire_binding(),
+            }],
+        });
 
         // Render Pipeline
-        let render_pipeline_layout = device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[&constant_buffer_bind_group_layout],
                 push_constant_ranges: &[],
-            }
-        );
+            });
 
-        let render_pipeline = device.create_render_pipeline(
-            &wgpu::RenderPipelineDescriptor {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &vertex_shader,
-                    // module: &shader,
-                    entry_point: "VS",
-                    buffers: &[Vertex::desc()],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &fragment_shader,
-                    // module: &shader,
-                    entry_point: "PS",
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: config.format,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Cw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,
-            }
-        );
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &vertex_shader,
+                // module: &shader,
+                entry_point: "VS",
+                buffers: &[Vertex::desc()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &fragment_shader,
+                // module: &shader,
+                entry_point: "PS",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+
+        let clear_color = wgpu::Color::BLUE;
 
         // Box
         let (vertices, indices) = geometry_builder::build_box(2);
 
-        let vertex_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
-        );
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
         let num_vertices = vertices.len() as u32;
 
-        let index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         let num_indices = indices.len() as u32;
 
@@ -274,6 +243,7 @@ impl State {
             num_indices,
             camera,
             constant_buffer_bind_group,
+            clear_color,
         }
     }
 
@@ -301,20 +271,20 @@ impl State {
                 };
                 true
             }
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state,
-                        virtual_keycode: Some(VirtualKeyCode::Space),
-                        ..
-                    },
-                ..
-            } => {
-                if *state == ElementState::Pressed {
-                    self.use_color = !self.use_color
-                }
-                true
-            }
+            // WindowEvent::KeyboardInput {
+            //     input:
+            //         KeyboardInput {
+            //             state,
+            //             virtual_keycode: Some(VirtualKeyCode::Space),
+            //             ..
+            //         },
+            //     ..
+            // } => {
+            //     if *state == ElementState::Pressed {
+            //         self.use_color = !self.use_color
+            //     }
+            //     true
+            // }
             _ => false,
         }
     }
@@ -344,7 +314,7 @@ impl State {
                 })],
                 depth_stencil_attachment: None,
             });
-    
+
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.constant_buffer_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -415,5 +385,3 @@ pub async fn run() {
         _ => {}
     });
 }
-
-// 7 8 1 4 6 5 9 3 0
